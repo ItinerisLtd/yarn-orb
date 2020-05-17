@@ -1,76 +1,213 @@
 version: 2.1
 
 orbs:
-  circleci-cli: circleci/circleci-cli@0
+  orb-tools: circleci/orb-tools@9.1
+  # add your orb below, to be used in integration tests (note: a
+  # @dev:alpha release must exist; if none exists, you'll need to
+  # publish manually once before this worklow can succeed)
+  yarn: itinerisltd/yarn@<<pipeline.parameters.dev-orb-version>>
+
+# Pipeline parameters
+parameters:
+  # These pipeline parameters are required by the "trigger-integration-tests-workflow"
+  # job, by default.
+  run-integration-tests:
+    type: boolean
+    default: false
+  dev-orb-version:
+    type: string
+    default: "dev:alpha"
+
+orb_prep_jobs: &orb_prep_jobs
+  [
+    orb-tools/lint,
+    orb-tools/shellcheck,
+    orb-tools/pack
+  ]
+
+orb_integration_test_jobs: &orb_integration_test_jobs
+  [
+    integration-test-install-packages-if-changed--unchanged,
+    integration-test-install-packages-if-changed--changed,
+    integration-test-install-packages-if-changed--unchanged-force,
+    integration-test-install-packages-if-changed--changed-force,
+
+    integration-test-test-if-changed--unchanged,
+    integration-test-test-if-changed--changed,
+    integration-test-test-if-changed--unchanged-force,
+    integration-test-test-if-changed--changed-force
+  ]
+
+orb_integration_test_step_commit_changes: &orb_integration_test_step_commit_changes
+  - run: git config --global user.email "you@example.com"
+  - run: git config --global user.name "Your Name"
+  - run: touch example/dummy.txt
+  - run: git add example/dummy.txt
+  - run: git commit -m 'Add example/dummy.txt'
+
+orb_integration_test_install_packages_if_changed_parameters: &orb_integration_test_install_packages_if_changed_parameters
+  except_branches: none
+  git_base_branch: origin/${BRANCH_NAME}
+  paths: example
+  app-dir: example
 
 jobs:
-  vaildate-orb:
-    executor: circleci-cli/default
-    parameters:
-      orb_path:
-        type: string
+  integration-test-install-packages-if-changed--unchanged:
+    executor: yarn/default
     steps:
       - checkout
-      - run: circleci version
-      - run: circleci orb validate << parameters.orb_path >>
+      - yarn/install-packages-if-changed:
+          <<: *orb_integration_test_install_packages_if_changed_parameters
+      # TODO: Assert "yarn install" never been called.
+      # TODO: Assert "circleci-agent step halt" has been called.
+      - run:
+          name: Assert the previous step has halt the build
+          command: exit 1
 
-  build-tiller-circleci-docker:
-    machine: true
-    parameters:
-      node_version:
-        type: string
-      docker_user:
-        type: env_var_name
-        default: DOCKER_USER
-      docker_pass:
-        type: env_var_name
-        default: DOCKER_PASS
+  integration-test-install-packages-if-changed--changed:
+    executor: yarn/default
     steps:
       - checkout
-      - run: docker build --tag itinerisltd/tiller-circleci:node-<< parameters.node_version >> --build-arg NODE_VERSION=<< parameters.node_version >> src/tiller-circleci
-      - run: echo ${<< parameters.docker_pass >>} | docker login --username ${<< parameters.docker_user >>} --password-stdin
-      - run: docker push itinerisltd/tiller-circleci:node-<< parameters.node_version >>
+      - run: git config --global user.email "you@example.com"
+      - run: git config --global user.name "Your Name"
+      - run: touch example/dummy.txt
+      - run: git add example/dummy.txt
+      - run: git commit -m 'Add example/dummy.txt'
+      - yarn/install-packages-if-changed:
+          <<: *orb_integration_test_install_packages_if_changed_parameters
+      - run:
+          name: Assert packages are installed
+          command: test -f example/node_modules/leftpad/package.json
+          when: always
 
-# Wait for https://discuss.circleci.com/t/workflows-seem-incomplete/13461
-only-master-filter: &only-master-filter
-  filters:
-    branches:
-      only: master
+  integration-test-install-packages-if-changed--unchanged-force:
+    executor: yarn/default
+    steps:
+      - checkout
+      - yarn/install-packages-if-changed:
+          <<: *orb_integration_test_install_packages_if_changed_parameters
+          force: true
+      - run:
+          name: Assert packages are installed
+          command: test -f example/node_modules/leftpad/package.json
+          when: always
 
-build-docker-workflow: &build-docker-workflow
-  jobs:
-    - build-tiller-circleci-docker:
-        <<: *only-master-filter
-        name: node-10-tiller-circleci
-        node_version: '10'
-    - build-tiller-circleci-docker:
-        <<: *only-master-filter
-        name: node-12-tiller-circleci
-        node_version: '12'
+  integration-test-install-packages-if-changed--changed-force:
+    executor: yarn/default
+    steps:
+      - checkout
+      - run: git config --global user.email "you@example.com"
+      - run: git config --global user.name "Your Name"
+      - run: touch example/dummy.txt
+      - run: git add example/dummy.txt
+      - run: git commit -m 'Add example/dummy.txt'
+      - yarn/install-packages-if-changed:
+          <<: *orb_integration_test_install_packages_if_changed_parameters
+          force: true
+      - run:
+          name: Assert packages are installed
+          command: test -f example/node_modules/leftpad/package.json
+          when: always
 
 workflows:
-  build-docker-nightly:
-    <<: *build-docker-workflow
-    triggers:
-      - schedule:
-          <<: *only-master-filter
-          # Every day at 0600 UTC
-          cron: "0 6 * * *"
+  lint_pack-validate_publish-dev:
+    unless: << pipeline.parameters.run-integration-tests >>
+    jobs:
+      # This `lint-pack_validate_publish-dev` workflow will run on any commit
+      # Lint your YAML
+      - orb-tools/lint
+      # Linting for BASH commands
+      - orb-tools/shellcheck:
+          exclude: "SC1009,SC1073"
+      # Pack the orb into a single file and validate the result.
+      - orb-tools/pack
+      # release dev version of orb, for testing & possible publishing.
+      # orb will be published as dev:alpha and dev:${CIRCLE_SHA1:0:7}.
+      # requires a CircleCI API token to be stored as CIRCLE_TOKEN (default)
+      # https://circleci.com/docs/2.0/managing-api-tokens
+      # store CIRCLE_TOKEN as a project env var or Contexts resource
+      # if using Contexts, add your context below
+      - orb-tools/publish-dev:
+          orb-name: itinerisltd/yarn
+          requires: *orb_prep_jobs
+
+      # trigger an integration workflow to test the
+      # dev:${CIRCLE_SHA1:0:7} version of your orb
+      - orb-tools/trigger-integration-tests-workflow:
+          name: trigger-integration-dev
+          requires:
+            - orb-tools/publish-dev
+
+  # This `integration-tests_prod-release` workflow will only run
+  # when the run-integration-tests pipeline parameter is set to true.
+  # It is meant to be triggered by the "trigger-integration-tests-workflow"
+  # job, and run tests on <your orb>@dev:${CIRCLE_SHA1:0:7}.
+  integration-tests_prod-release:
+    when: << pipeline.parameters.run-integration-tests >>
+    jobs:
+      # your integration test jobs go here: essentially, run all your orb's
+      # jobs and commands to ensure they behave as expected. or, run other
+      # integration tests of your choosing
+
+      - integration-test-install-packages-if-changed--unchanged
+      - integration-test-install-packages-if-changed--changed
+      - integration-test-install-packages-if-changed--unchanged-force
+      - integration-test-install-packages-if-changed--changed-force
+
+      - yarn/test-if-changed:
+          <<: *orb_integration_test_install_packages_if_changed_parameters
+          name: integration-test-test-if-changed--unchanged
+          post-steps:
+            # TODO: Assert "yarn install" never been called.
+            # TODO: Assert "circleci-agent step halt" has been called.
+            - run:
+                name: Assert the previous step has halt the build
+                command: exit 1
+
+      - yarn/test-if-changed:
+          <<: *orb_integration_test_install_packages_if_changed_parameters
+          name: integration-test-test-if-changed--changed
+          setup: *orb_integration_test_step_commit_changes
+          post-steps:
+            - run:
+                name: Assert packages are installed
+                command: test -f example/node_modules/leftpad/package.json
+                when: always
+
+      - yarn/test-if-changed:
+          <<: *orb_integration_test_install_packages_if_changed_parameters
+          name: integration-test-test-if-changed--unchanged-force
+          force: true
+          post-steps:
+            - run:
+                name: Assert packages are installed
+                command: test -f example/node_modules/leftpad/package.json
+                when: always
+
+      - yarn/test-if-changed:
+          <<: *orb_integration_test_install_packages_if_changed_parameters
+          name: integration-test-test-if-changed--changed-force
+          force: true
+          setup: *orb_integration_test_step_commit_changes
+          post-steps:
+            - run:
+                name: Assert packages are installed
+                command: test -f example/node_modules/leftpad/package.json
+                when: always
+
+      # publish a semver version of the orb. relies on
+      # the commit subject containing the text "[semver:patch|minor|major|skip]"
+      # as that will determine whether a patch, minor or major
+      # version will be published or if publishing should
+      # be skipped.
+      # e.g. [semver:patch] will cause a patch version to be published.
+      - orb-tools/dev-promote-prod-from-commit-subject:
+          orb-name: itinerisltd/yarn
+          add-pr-comment: false
+          publish-version-tag: true
+          ssh-fingerprints: 1c:10:ab:6d:5f:4e:56:f6:2e:cc:7c:8e:30:cf:f3:20
+          fail-if-semver-not-indicated: true
+          requires: *orb_integration_test_jobs
           filters:
             branches:
               only: master
-
-  build-docker-on-push:
-    <<: *build-docker-workflow
-
-  vaildate-orbs:
-    jobs:
-      - vaildate-orb:
-          name: vaildate-composer-orb
-          orb_path: 'src/composer/orb.yml'
-      - vaildate-orb:
-          name: vaildate-tiller-circleci-orb
-          orb_path: 'src/tiller-circleci/orb.yml'
-      - vaildate-orb:
-          name: vaildate-yarn-orb
-          orb_path: 'src/yarn/orb.yml'

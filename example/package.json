@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "leftpad": "^0.0.1"
+  },
+  "scripts": {
+    "test": "touch test-was-triggered.txt"
+  }
+}

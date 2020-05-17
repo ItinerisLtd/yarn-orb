@@ -1,0 +1,68 @@
+# How to author commands: https://circleci.com/docs/2.0/reusing-config/#authoring-reusable-commands
+description: >
+  Replace this text with a description for this command.
+  # What will this command do?
+  # Descriptions should be short, simple, and clear.
+parameters:
+  force:
+    default: false
+    description: Always install packages despite files were changed
+    type: boolean
+  # skip/skip_unchanged parameters
+  except_branches:
+    default: master,staging,production,release
+    description: >
+      Comma-separated list of git branches where we should never skip tests.
+    type: string
+  git_base_branch:
+    default: origin/master
+    description: The branch to compare against when looking for changing.
+    type: string
+  paths:
+    description: The paths to look for changes in.
+    type: string
+  # node/install-packages parameters
+  app-dir:
+    default: ~/project
+    description: >
+      Path to the directory containing your package.json file. Not needed if
+      package.json lives in the root.
+    type: string
+  cache-version:
+    default: v1
+    description: >
+      Change the default cache version if you need to clear the cache for any
+      reason.
+    type: string
+  include-branch-in-cache-key:
+    default: true
+    description: >
+      If true, this cache bucket will only apply to jobs within the same branch.
+    type: boolean
+  override-ci:
+    default: false
+    description: >
+      By default, modules will be installed with "npm ci" or "yarn install
+      --frozen-lockfile", this override will use the standard "install" command.
+    type: boolean
+  with-cache:
+    default: true
+    description: >
+      Enable automatic caching of your node dependencies for increased speed.
+    type: boolean
+steps:
+  - unless:
+      condition: << parameters.force >>
+      steps:
+        - skip/skip_unchanged:
+            except_branches: << parameters.except_branches >>
+            git_base_branch: << parameters.git_base_branch >>
+            paths: << parameters.paths >>
+  - node/install-packages:
+      app-dir: <<parameters.app-dir>>
+      cache-key: yarn.lock
+      cache-version: << parameters.cache-version >>
+      include-branch-in-cache-key: << parameters.include-branch-in-cache-key >>
+      override-ci: << parameters.override-ci >>
+      pkg-manager: yarn
+      with-cache: << parameters.with-cache >>
