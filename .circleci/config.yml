@@ -205,7 +205,7 @@ workflows:
           orb-name: itinerisltd/yarn
           add-pr-comment: false
           publish-version-tag: true
-          ssh-fingerprints: 1c:10:ab:6d:5f:4e:56:f6:2e:cc:7c:8e:30:cf:f3:20
+          ssh-fingerprints: 87:2b:7b:01:f2:d6:a2:98:93:bd:1b:e8:9a:8e:c4:ce
           fail-if-semver-not-indicated: true
           requires: *orb_integration_test_jobs
           filters:
