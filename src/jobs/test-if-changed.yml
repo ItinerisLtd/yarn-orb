@@ -1,5 +1,6 @@
-description: |
-  Simple drop-in job to test your NodeJS application automatically.
+description: >
+  Simple drop-in job to test your NodeJS application automatically. Immediately
+  mark build as passed if app is unchanged.
 
 parameters:
   setup:
