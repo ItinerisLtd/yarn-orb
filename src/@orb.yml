@@ -1,7 +1,7 @@
 version: 2.1
 
 description: >
-  Easily install your Node.js packages (yarn) with caching enabled by default and skip if app is unchanged.
+  Easily install your Node.js packages (yarn) with caching enabled by default. Immediately mark build as passed if app is unchanged.
 
 # This information will be displayed in the orb registry and is not mandatory.
 display:

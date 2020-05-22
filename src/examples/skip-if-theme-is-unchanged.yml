@@ -1,0 +1,16 @@
+description: >
+  How to quickly and easily run your Node.js tests on CircleCI with caching
+  automatically included. Immediately mark build as passed if the "app/theme"
+  folder is unchanged. Otherwise, run "yarn && yarn test" at the "app" folder
+  with Node.js v12.16.
+usage:
+  version: 2.1
+  orbs:
+    yarn: itinerisltd/yarn:x.y # This version number refers to the version of the orb, not the version of NodeJS nor yarn
+  workflows:
+    test:
+      jobs:
+        - yarn/install-packages-if-changed:
+            version: "12.16"
+            paths: path/to/my/app/theme
+            app-dir: path/to/my/app
