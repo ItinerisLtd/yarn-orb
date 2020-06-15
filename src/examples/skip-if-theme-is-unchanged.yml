@@ -10,7 +10,7 @@ usage:
   workflows:
     test:
       jobs:
-        - yarn/install-packages-if-changed:
+        - yarn/test-if-changed:
             version: "12.16"
             paths: path/to/my/app/theme
             app-dir: path/to/my/app
